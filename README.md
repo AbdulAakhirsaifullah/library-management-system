@@ -3,7 +3,7 @@
 **A lending library that keeps its own records.** Catalogue, loans, waiting lists and an audit log,
 in one app that members and staff both work from.
 
-**[Live demo](#)** · demo login `ayesha` / `Reader@123` · staff login `Admin` / `Admin@123`
+**[Live demo](   https://server-production-7113.up.railway.app)** · demo login `ayesha` / `Reader@123` · staff login `Admin` / `Admin@123`
 
 > Replace the link above with your deployed URL once it is live.
 
