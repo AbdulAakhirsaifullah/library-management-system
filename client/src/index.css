@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-board text-ink font-sans antialiased;
+  }
+
+  /* Visible keyboard focus everywhere, not just where we remembered it. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-cloth ring-offset-2 ring-offset-board;
+  }
+
+  h1, h2, h3 {
+    @apply font-title text-ink;
+    text-wrap: balance;
+  }
+}
+
+@layer components {
+  /* Prose measure: keeps reading columns under ~72 characters. */
+  .measure {
+    max-width: 62ch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

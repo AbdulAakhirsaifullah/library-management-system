@@ -1,0 +1,155 @@
+// Data model for the Library Management System.
+// Replaces users.txt / book_catalog.txt / borrowed_books.txt / waiting_list.txt /
+// activityLog.txt from the original C++ program.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// --- Users -------------------------------------------------------------
+// Was: users.txt, one space-separated "username email password" line per user.
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         String   @default("USER") // USER | ADMIN
+  createdAt    DateTime @default(now())
+
+  loans           Loan[]          @relation("LoanBorrower")
+  actedLoans      Loan[]          @relation("LoanActor")
+  waitlistEntries WaitlistEntry[]
+  activities      Activity[]
+  notifications   Notification[]
+  passwordResets  PasswordReset[]
+  heldBooks       Book[]          @relation("BookHeldFor")
+}
+
+// --- Books -------------------------------------------------------------
+// Was: a BST keyed on the string book ID, persisted to book_catalog.txt.
+// The BST is replaced by indexed columns, which give the same fast lookups
+// plus title/author/genre search the original could not do.
+model Book {
+  id        String   @id // human-readable ID from the original, e.g. "B001"
+  title     String
+  author    String
+  genre     String
+  available Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // When a book is returned and someone is queued, it is put on hold for
+  // that person rather than released to everyone.
+  heldForUserId String?
+  heldForUser   User?     @relation("BookHeldFor", fields: [heldForUserId], references: [id], onDelete: SetNull)
+  holdExpiresAt DateTime?
+
+  loans         Loan[]
+  waitlist      WaitlistEntry[]
+  activities    Activity[]
+  notifications Notification[]
+
+  @@index([title])
+  @@index([author])
+  @@index([genre])
+  @@index([available])
+}
+
+// --- Loans -------------------------------------------------------------
+// Was: borrowed_books.txt plus the in-memory `borrowed_by` field, which the
+// original never persisted (ownership was lost on restart).
+model Loan {
+  id         String    @id @default(cuid())
+  bookId     String
+  book       Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation("LoanBorrower", fields: [userId], references: [id], onDelete: Cascade)
+  borrowedAt DateTime  @default(now())
+  dueAt      DateTime?
+  returnedAt DateTime?
+
+  // Set when an admin borrows or returns on someone else's behalf.
+  actedByUserId String?
+  actedBy       User?   @relation("LoanActor", fields: [actedByUserId], references: [id], onDelete: SetNull)
+  returnedByAdmin Boolean @default(false)
+
+  @@index([userId, returnedAt])
+  @@index([bookId, returnedAt])
+  @@index([borrowedAt])
+}
+
+// --- Waiting list ------------------------------------------------------
+// Was: a per-book Queue that all shared one global waiting_list.txt with no
+// book ID, so every book inherited every queued username on restart.
+model WaitlistEntry {
+  id         String    @id @default(cuid())
+  bookId     String
+  book       Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status     String    @default("WAITING") // WAITING | HOLD | FULFILLED | EXPIRED | CANCELLED
+  createdAt  DateTime  @default(now())
+  notifiedAt DateTime?
+  resolvedAt DateTime?
+
+  @@index([bookId, status, createdAt])
+  @@index([userId, status])
+}
+
+// --- Activity log ------------------------------------------------------
+// Was: activityLog.txt, rewritten on every push so the newest line sat first
+// (the stack's LIFO display). Here it is an ordered table read newest-first.
+model Activity {
+  id            String   @id @default(cuid())
+  action        String // BORROW | RETURN | WAITLIST_JOIN | WAITLIST_LEAVE | HOLD_ASSIGNED | HOLD_EXPIRED | BOOK_ADDED | BOOK_UPDATED | BOOK_DELETED
+  username      String // snapshot, so the log survives user deletion
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookId        String?
+  book          Book?    @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  bookTitle     String // the original logged the book ID here by mistake
+  genre         String   @default("")
+  actorUsername String? // who performed it, if not the subject (admin action)
+  detail        String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+// --- Notifications -----------------------------------------------------
+// The original printed "Notifying <user>..." to the admin's console, where
+// the user could never see it. Now it lands in their account.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String?
+  book      Book?     @relation(fields: [bookId], references: [id], onDelete: SetNull)
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// --- Password reset ----------------------------------------------------
+// Replaces the original "would you like to see your password?" flow, which
+// verified username + email and then printed the stored plaintext password.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
